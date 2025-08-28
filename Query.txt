@@ -1,0 +1,266 @@
+STORE PROCEDURE
+
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+CREATE   PROCEDURE [dbo].[usp_CarSummary]
+AS
+BEGIN
+    SET NOCOUNT ON;
+
+    SELECT 
+        c.Id          AS CarId,
+        cs.Year     AS CarYear,
+        mk.Name     AS Make,
+        md.Name     AS Model,
+        sm.Name     AS SubModel,
+        b.Name      AS CurrentBuyer,
+        o.Amount      AS CurrentQuote,
+        st.Name     AS CurrentStatus,
+        s.StatusDate  AS CurrentStatusDate
+    FROM Car c
+    JOIN CarSpec cs       ON cs.Id = c.CarSpecId
+    JOIN Make mk          ON mk.Id = cs.MakeId
+    JOIN Model md         ON md.Id = cs.ModelId
+    LEFT JOIN SubModel sm ON sm.Id = cs.SubModelId
+    LEFT JOIN Offer o     ON o.CarId = c.Id AND o.[Current] = 1
+    LEFT JOIN Buyer b     ON b.Id = o.BuyerId
+    LEFT JOIN CarStatus s ON s.CarId = c.Id AND s.IsCurrent = 1
+    LEFT JOIN Status st   ON st.Id = s.StatusId;
+END
+GO
+
+
+
+------------------------------------------------------------------------------------------
+
+-----------------------------------------
+-- Catálogos: Make / Model / SubModel
+-----------------------------------------
+IF NOT EXISTS (SELECT 1 FROM dbo.Make WHERE [Name] = 'Toyota')
+    INSERT INTO dbo.Make([Name]) VALUES ('Toyota');
+IF NOT EXISTS (SELECT 1 FROM dbo.Make WHERE [Name] = 'Honda')
+    INSERT INTO dbo.Make([Name]) VALUES ('Honda');
+IF NOT EXISTS (SELECT 1 FROM dbo.Make WHERE [Name] = 'Ford')
+    INSERT INTO dbo.Make([Name]) VALUES ('Ford');
+
+DECLARE @MakeToyotaId INT = (SELECT Id FROM dbo.Make WHERE [Name] = 'Toyota');
+DECLARE @MakeHondaId  INT = (SELECT Id FROM dbo.Make WHERE [Name] = 'Honda');
+DECLARE @MakeFordId   INT = (SELECT Id FROM dbo.Make WHERE [Name] = 'Ford');
+
+-- Modelos por Make
+IF NOT EXISTS (SELECT 1 FROM dbo.[Model] WHERE [Name] = 'Corolla' AND MakeId = @MakeToyotaId)
+    INSERT INTO dbo.[Model]([Name], MakeId) VALUES ('Corolla', @MakeToyotaId);
+IF NOT EXISTS (SELECT 1 FROM dbo.[Model] WHERE [Name] = 'Civic' AND MakeId = @MakeHondaId)
+    INSERT INTO dbo.[Model]([Name], MakeId) VALUES ('Civic', @MakeHondaId);
+IF NOT EXISTS (SELECT 1 FROM dbo.[Model] WHERE [Name] = 'F-150' AND MakeId = @MakeFordId)
+    INSERT INTO dbo.[Model]([Name], MakeId) VALUES ('F-150', @MakeFordId);
+
+DECLARE @ModelCorollaId INT = (SELECT Id FROM dbo.[Model] WHERE [Name] = 'Corolla' AND MakeId = @MakeToyotaId);
+DECLARE @ModelCivicId   INT = (SELECT Id FROM dbo.[Model] WHERE [Name] = 'Civic'   AND MakeId = @MakeHondaId);
+DECLARE @ModelF150Id    INT = (SELECT Id FROM dbo.[Model] WHERE [Name] = 'F-150'   AND MakeId = @MakeFordId);
+
+-- SubModel (trims)
+IF NOT EXISTS (SELECT 1 FROM dbo.SubModel WHERE [Name] = 'LE' AND ModelId = @ModelCorollaId)
+    INSERT INTO dbo.SubModel([Name], ModelId) VALUES ('LE', @ModelCorollaId);
+IF NOT EXISTS (SELECT 1 FROM dbo.SubModel WHERE [Name] = 'SE' AND ModelId = @ModelCorollaId)
+    INSERT INTO dbo.SubModel([Name], ModelId) VALUES ('SE', @ModelCorollaId);
+
+IF NOT EXISTS (SELECT 1 FROM dbo.SubModel WHERE [Name] = 'EX' AND ModelId = @ModelCivicId)
+    INSERT INTO dbo.SubModel([Name], ModelId) VALUES ('EX', @ModelCivicId);
+
+IF NOT EXISTS (SELECT 1 FROM dbo.SubModel WHERE [Name] = 'Lariat' AND ModelId = @ModelF150Id)
+    INSERT INTO dbo.SubModel([Name], ModelId) VALUES ('Lariat', @ModelF150Id);
+
+DECLARE @SubCorollaLEId INT   = (SELECT Id FROM dbo.SubModel WHERE [Name] = 'LE'     AND ModelId = @ModelCorollaId);
+DECLARE @SubCivicEXId   INT   = (SELECT Id FROM dbo.SubModel WHERE [Name] = 'EX'     AND ModelId = @ModelCivicId);
+DECLARE @SubF150LariatId INT  = (SELECT Id FROM dbo.SubModel WHERE [Name] = 'Lariat' AND ModelId = @ModelF150Id);
+
+-----------------------------------------
+-- CarSpec (Year + Make + Model + SubModel)
+-----------------------------------------
+IF NOT EXISTS (
+    SELECT 1 FROM dbo.CarSpec 
+    WHERE [Year] = 2015 AND MakeId = @MakeToyotaId AND ModelId = @ModelCorollaId AND ISNULL(SubModelId,0) = ISNULL(@SubCorollaLEId,0)
+)
+    INSERT INTO dbo.CarSpec([Year], MakeId, ModelId, SubModelId) VALUES (2015, @MakeToyotaId, @ModelCorollaId, @SubCorollaLEId);
+
+IF NOT EXISTS (
+    SELECT 1 FROM dbo.CarSpec 
+    WHERE [Year] = 2018 AND MakeId = @MakeHondaId  AND ModelId = @ModelCivicId   AND ISNULL(SubModelId,0) = ISNULL(@SubCivicEXId,0)
+)
+    INSERT INTO dbo.CarSpec([Year], MakeId, ModelId, SubModelId) VALUES (2018, @MakeHondaId, @ModelCivicId, @SubCivicEXId);
+
+IF NOT EXISTS (
+    SELECT 1 FROM dbo.CarSpec 
+    WHERE [Year] = 2020 AND MakeId = @MakeFordId   AND ModelId = @ModelF150Id    AND ISNULL(SubModelId,0) = ISNULL(@SubF150LariatId,0)
+)
+    INSERT INTO dbo.CarSpec([Year], MakeId, ModelId, SubModelId) VALUES (2020, @MakeFordId, @ModelF150Id, @SubF150LariatId);
+
+DECLARE @SpecCorolla2015LE INT = (
+    SELECT TOP 1 Id FROM dbo.CarSpec 
+    WHERE [Year] = 2015 AND MakeId = @MakeToyotaId AND ModelId = @ModelCorollaId AND SubModelId = @SubCorollaLEId
+);
+DECLARE @SpecCivic2018EX INT = (
+    SELECT TOP 1 Id FROM dbo.CarSpec 
+    WHERE [Year] = 2018 AND MakeId = @MakeHondaId AND ModelId = @ModelCivicId AND SubModelId = @SubCivicEXId
+);
+DECLARE @SpecF1502020Lariat INT = (
+    SELECT TOP 1 Id FROM dbo.CarSpec 
+    WHERE [Year] = 2020 AND MakeId = @MakeFordId AND ModelId = @ModelF150Id AND SubModelId = @SubF150LariatId
+);
+
+-----------------------------------------
+-- Locations (ZIP codes)
+-----------------------------------------
+IF NOT EXISTS (SELECT 1 FROM dbo.Location WHERE ZipCode = '33101')
+    INSERT INTO dbo.Location(ZipCode) VALUES ('33101');
+IF NOT EXISTS (SELECT 1 FROM dbo.Location WHERE ZipCode = '90001')
+    INSERT INTO dbo.Location(ZipCode) VALUES ('90001');
+IF NOT EXISTS (SELECT 1 FROM dbo.Location WHERE ZipCode = '10001')
+    INSERT INTO dbo.Location(ZipCode) VALUES ('10001');
+
+DECLARE @Loc33101 INT = (SELECT Id FROM dbo.Location WHERE ZipCode = '33101');
+DECLARE @Loc90001 INT = (SELECT Id FROM dbo.Location WHERE ZipCode = '90001');
+DECLARE @Loc10001 INT = (SELECT Id FROM dbo.Location WHERE ZipCode = '10001');
+
+-----------------------------------------
+-- Buyers
+-----------------------------------------
+IF NOT EXISTS (SELECT 1 FROM dbo.Buyer WHERE [Name] = 'Buyer ABC')
+    INSERT INTO dbo.Buyer([Name]) VALUES ('Buyer ABC');
+IF NOT EXISTS (SELECT 1 FROM dbo.Buyer WHERE [Name] = 'Buyer XYZ')
+    INSERT INTO dbo.Buyer([Name]) VALUES ('Buyer XYZ');
+IF NOT EXISTS (SELECT 1 FROM dbo.Buyer WHERE [Name] = 'Buyer Motors')
+    INSERT INTO dbo.Buyer([Name]) VALUES ('Buyer Motors');
+
+DECLARE @BuyerABC    INT = (SELECT Id FROM dbo.Buyer WHERE [Name] = 'Buyer ABC');
+DECLARE @BuyerXYZ    INT = (SELECT Id FROM dbo.Buyer WHERE [Name] = 'Buyer XYZ');
+DECLARE @BuyerMotors INT = (SELECT Id FROM dbo.Buyer WHERE [Name] = 'Buyer Motors');
+
+-----------------------------------------
+-- LocationBuyer (cobertura por ZIP)
+-- ABC: 33101, 90001
+-- XYZ: 10001
+-- Motors: 33101, 90001, 10001
+-----------------------------------------
+IF NOT EXISTS (SELECT 1 FROM dbo.LocationBuyer WHERE LocationId = @Loc33101 AND BuyerId = @BuyerABC)
+    INSERT INTO dbo.LocationBuyer(LocationId, BuyerId) VALUES (@Loc33101, @BuyerABC);
+IF NOT EXISTS (SELECT 1 FROM dbo.LocationBuyer WHERE LocationId = @Loc90001 AND BuyerId = @BuyerABC)
+    INSERT INTO dbo.LocationBuyer(LocationId, BuyerId) VALUES (@Loc90001, @BuyerABC);
+
+IF NOT EXISTS (SELECT 1 FROM dbo.LocationBuyer WHERE LocationId = @Loc10001 AND BuyerId = @BuyerXYZ)
+    INSERT INTO dbo.LocationBuyer(LocationId, BuyerId) VALUES (@Loc10001, @BuyerXYZ);
+
+IF NOT EXISTS (SELECT 1 FROM dbo.LocationBuyer WHERE LocationId = @Loc33101 AND BuyerId = @BuyerMotors)
+    INSERT INTO dbo.LocationBuyer(LocationId, BuyerId) VALUES (@Loc33101, @BuyerMotors);
+IF NOT EXISTS (SELECT 1 FROM dbo.LocationBuyer WHERE LocationId = @Loc90001 AND BuyerId = @BuyerMotors)
+    INSERT INTO dbo.LocationBuyer(LocationId, BuyerId) VALUES (@Loc90001, @BuyerMotors);
+IF NOT EXISTS (SELECT 1 FROM dbo.LocationBuyer WHERE LocationId = @Loc10001 AND BuyerId = @BuyerMotors)
+    INSERT INTO dbo.LocationBuyer(LocationId, BuyerId) VALUES (@Loc10001, @BuyerMotors);
+
+-----------------------------------------
+-- Cars (3 autos en distintas ubicaciones)
+-----------------------------------------
+IF NOT EXISTS (SELECT 1 FROM dbo.Car WHERE CarSpecId = @SpecCorolla2015LE AND LocationId = @Loc33101)
+    INSERT INTO dbo.Car(CarSpecId, LocationId) VALUES (@SpecCorolla2015LE, @Loc33101);
+
+IF NOT EXISTS (SELECT 1 FROM dbo.Car WHERE CarSpecId = @SpecCivic2018EX AND LocationId = @Loc90001)
+    INSERT INTO dbo.Car(CarSpecId, LocationId) VALUES (@SpecCivic2018EX, @Loc90001);
+
+IF NOT EXISTS (SELECT 1 FROM dbo.Car WHERE CarSpecId = @SpecF1502020Lariat AND LocationId = @Loc10001)
+    INSERT INTO dbo.Car(CarSpecId, LocationId) VALUES (@SpecF1502020Lariat, @Loc10001);
+
+DECLARE @Car1 INT = (
+    SELECT TOP 1 c.Id 
+    FROM dbo.Car c 
+    WHERE c.CarSpecId = @SpecCorolla2015LE AND c.LocationId = @Loc33101 
+    ORDER BY c.Id
+);
+DECLARE @Car2 INT = (
+    SELECT TOP 1 c.Id 
+    FROM dbo.Car c 
+    WHERE c.CarSpecId = @SpecCivic2018EX AND c.LocationId = @Loc90001 
+    ORDER BY c.Id
+);
+DECLARE @Car3 INT = (
+    SELECT TOP 1 c.Id 
+    FROM dbo.Car c 
+    WHERE c.CarSpecId = @SpecF1502020Lariat AND c.LocationId = @Loc10001 
+    ORDER BY c.Id
+);
+
+-----------------------------------------
+-- Offers (una oferta "current" por auto; Car2 queda sin current)
+-----------------------------------------
+-- Car1: ofertas de ABC y Motors; "current" = ABC aunque no sea la más alta
+IF NOT EXISTS (SELECT 1 FROM dbo.Offer WHERE CarId = @Car1 AND BuyerId = @BuyerABC AND Amount = 500)
+    INSERT INTO dbo.Offer(CarId, BuyerId, Amount, [Current], [Date]) VALUES (@Car1, @BuyerABC, 500, 0, DATEADD(DAY,-5,GETUTCDATE()));
+IF NOT EXISTS (SELECT 1 FROM dbo.Offer WHERE CarId = @Car1 AND BuyerId = @BuyerMotors AND Amount = 550)
+    INSERT INTO dbo.Offer(CarId, BuyerId, Amount, [Current], [Date]) VALUES (@Car1, @BuyerMotors, 550, 0, DATEADD(DAY,-4,GETUTCDATE()));
+
+-- Garantizar solo una "current" en Car1 = Buyer ABC
+UPDATE dbo.Offer SET [Current] = 0 WHERE CarId = @Car1;
+UPDATE dbo.Offer SET [Current] = 1 WHERE CarId = @Car1 AND BuyerId = @BuyerABC;
+
+-- Car2: una oferta (no current) → endpoint/SP deben mostrar NULL de oferta actual
+IF NOT EXISTS (SELECT 1 FROM dbo.Offer WHERE CarId = @Car2 AND BuyerId = @BuyerMotors AND Amount = 650)
+    INSERT INTO dbo.Offer(CarId, BuyerId, Amount, [Current], [Date]) VALUES (@Car2, @BuyerMotors, 650, 0, DATEADD(DAY,-3,GETUTCDATE()));
+
+-- Car3: oferta de XYZ como current
+IF NOT EXISTS (SELECT 1 FROM dbo.Offer WHERE CarId = @Car3 AND BuyerId = @BuyerXYZ AND Amount = 400)
+    INSERT INTO dbo.Offer(CarId, BuyerId, Amount, [Current], [Date]) VALUES (@Car3, @BuyerXYZ, 400, 0, DATEADD(DAY,-2,GETUTCDATE()));
+
+UPDATE dbo.Offer SET [Current] = 0 WHERE CarId = @Car3;
+UPDATE dbo.Offer SET [Current] = 1 WHERE CarId = @Car3 AND BuyerId = @BuyerXYZ;
+
+-----------------------------------------
+-- Status (catálogo)
+-----------------------------------------
+IF NOT EXISTS (SELECT 1 FROM dbo.Status WHERE [Name] = 'Pending Acceptance')
+    INSERT INTO dbo.Status([Name], RequiresStatusDate) VALUES ('Pending Acceptance', 0);
+IF NOT EXISTS (SELECT 1 FROM dbo.Status WHERE [Name] = 'Accepted')
+    INSERT INTO dbo.Status([Name], RequiresStatusDate) VALUES ('Accepted', 0);
+IF NOT EXISTS (SELECT 1 FROM dbo.Status WHERE [Name] = 'Picked Up')
+    INSERT INTO dbo.Status([Name], RequiresStatusDate) VALUES ('Picked Up', 1);
+
+DECLARE @StPending INT = (SELECT Id FROM dbo.Status WHERE [Name] = 'Pending Acceptance');
+DECLARE @StAccepted INT = (SELECT Id FROM dbo.Status WHERE [Name] = 'Accepted');
+DECLARE @StPickedUp INT = (SELECT Id FROM dbo.Status WHERE [Name] = 'Picked Up');
+
+-----------------------------------------
+-- CarStatus (historial + estado actual)
+-----------------------------------------
+-- Car1: Pending -> Accepted (current)
+IF NOT EXISTS (SELECT 1 FROM dbo.CarStatus WHERE CarId = @Car1 AND StatusId = @StPending)
+    INSERT INTO dbo.CarStatus(CarId, StatusId, StatusDate, ChangedBy, ChangedAt, IsCurrent)
+    VALUES (@Car1, @StPending, NULL, 'system', DATEADD(DAY,-6,GETUTCDATE()), 0);
+
+IF NOT EXISTS (SELECT 1 FROM dbo.CarStatus WHERE CarId = @Car1 AND StatusId = @StAccepted)
+    INSERT INTO dbo.CarStatus(CarId, StatusId, StatusDate, ChangedBy, ChangedAt, IsCurrent)
+    VALUES (@Car1, @StAccepted, DATEADD(DAY,-1,GETUTCDATE()), 'system', DATEADD(DAY,-1,GETUTCDATE()), 0);
+
+-- Asegurar "current" en Accepted para Car1
+UPDATE dbo.CarStatus SET IsCurrent = 0 WHERE CarId = @Car1;
+UPDATE dbo.CarStatus SET IsCurrent = 1 WHERE CarId = @Car1 AND StatusId = @StAccepted;
+
+-- Car2: Pending (current)
+IF NOT EXISTS (SELECT 1 FROM dbo.CarStatus WHERE CarId = @Car2 AND StatusId = @StPending)
+    INSERT INTO dbo.CarStatus(CarId, StatusId, StatusDate, ChangedBy, ChangedAt, IsCurrent)
+    VALUES (@Car2, @StPending, NULL, 'system', DATEADD(DAY,-2,GETUTCDATE()), 0);
+
+UPDATE dbo.CarStatus SET IsCurrent = 0 WHERE CarId = @Car2;
+UPDATE dbo.CarStatus SET IsCurrent = 1 WHERE CarId = @Car2 AND StatusId = @StPending;
+
+-- Car3: Picked Up (current) → requiere StatusDate
+IF NOT EXISTS (SELECT 1 FROM dbo.CarStatus WHERE CarId = @Car3 AND StatusId = @StPickedUp)
+    INSERT INTO dbo.CarStatus(CarId, StatusId, StatusDate, ChangedBy, ChangedAt, IsCurrent)
+    VALUES (@Car3, @StPickedUp, DATEADD(DAY,-1,GETUTCDATE()), 'system', DATEADD(DAY,-1,GETUTCDATE()), 0);
+
+UPDATE dbo.CarStatus SET IsCurrent = 0 WHERE CarId = @Car3;
+UPDATE dbo.CarStatus SET IsCurrent = 1 WHERE CarId = @Car3 AND StatusId = @StPickedUp;
+
+COMMIT TRAN;
+GO
+
