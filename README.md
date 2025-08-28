@@ -2,7 +2,8 @@ Points two and three are answered here.
 
 2. For data that changes little but is consulted all the time, cache memory could be used. In a single instance, there would be no problem, but if the application runs in multiple instances, there would be problems with data desynchronisation.
 
-3. 
+3.
+
 public void UpdateCustomersBalanceByInvoices(List<Invoice> invoices)
 {
     //1. parameter was not validate
